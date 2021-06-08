@@ -1,0 +1,47 @@
+- hosts: machines
+  become: true
+  tasks:
+    - name: Makes sure cron is enabled and started
+      ansible.builtin.systemd:
+        name: crond
+        enabled: yes
+        state: started
+
+    - name: Ensure crontab permissions
+      ansible.builtin.file:
+        path: /etc/crontab
+        owner: root
+        group: root
+        mode: '0600'
+
+    - name: Ensure permissions on cron folders
+      ansible.builtin.file:
+        path: '/etc/cron.{{ item }}'
+        owner: root
+        group: root
+        mode: '0700'
+      with_items:
+        - hourly
+        - daily
+        - weekly
+        - monthly
+        - d
+
+    - name: Ensure cron.deny and at.deny don't exist
+      ansible.builtin.file:
+        path: '/etc/{{ item }}.deny'
+        state: absent
+      with_items:
+        - cron
+        - at
+
+    - name: Ensure permissions for cron.allow and at.allow
+      ansible.builtin.file:
+        path: '/etc/{{ item }}.allow'
+        state: touch
+        owner: root
+        group: root
+        mode: '0600'
+      with_items:
+        - cron
+        - at
