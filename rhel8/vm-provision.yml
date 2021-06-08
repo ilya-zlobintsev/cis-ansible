@@ -1,3 +1,4 @@
+# This file isn't really needed, but Vagrant needs an ansible playbook for provisioning so that it creates an ansible inventory file, which can later be used for other playbooks
 - hosts: all
   become: yes
   tasks:
