@@ -1,4 +1,4 @@
-- hosts: machines
+- hosts: all
   become: true
   tasks:
     - name: Makes sure cron is enabled and started

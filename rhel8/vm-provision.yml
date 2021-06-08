@@ -1,0 +1,7 @@
+- hosts: all
+  become: yes
+  tasks:
+    - name: Make sure python is installed
+      yum:
+        name: python3
+        state: present
