@@ -1,0 +1,141 @@
+- hosts: all
+  become: yes
+  tasks:
+    - name: Ensure permissions on sshd_config
+      ansible.builtin.file:
+        path: /etc/ssh/sshd_config
+        owner: root
+        group: root
+        mode: 0600
+          #- name: Ensure SSH access is limited
+          #  ansible.builtin.lineinfile:
+          #    path: /etc/ssh/sshd_config
+          #    state: present
+          #    line:
+
+    - find: paths='/etc/ssh' patterns='ssh_host_*_key'
+      register: ssh_private_keys
+
+    - name: Ensure permissions on SSH private host key files
+      ansible.builtin.file:
+        path: '{{ item.path }}'
+        owner: root
+        group: root
+        mode: 0600
+      with_items:
+        - '{{ ssh_private_keys.files }}'
+
+    - find: paths='/etc/ssh' patterns='ssh_host_*_key.pub'
+      register: ssh_public_keys
+
+    - name: Ensure permissions on SSH public host key files
+      ansible.builtin.file:
+        path: '{{ item.path }}'
+        owner: root
+        group: root
+        mode: 0640
+      with_items:
+        - '{{ ssh_public_keys.files }}'
+
+    - name: Check if SSH LogLevel is appropriate
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^\s*LogLevel\s*INFO|VERBOSE'
+        state: absent
+      check_mode: yes
+      changed_when: false
+      register: ssh_loglevel_appropriate
+
+    - name: Set SSH LogLevel 
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^\s*LogLevel\s*'
+        line: 'LogLevel INFO'
+        state: present
+      when: not ssh_loglevel_appropriate.found
+
+    - debug:
+        msg: "SSH Loglevel is appropriate"
+      when: ssh_loglevel_appropriate.found
+
+    - name: Ensure X11 forwarding is disabled
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: 'X11Forwarding\s+yes' # It's disabled by default
+        state: absent
+
+    - name: Check if MaxAuthTries is 4 or less
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^\s*MaxAuthTries\s+[1-4]'
+        state: absent
+      check_mode: yes
+      changed_when: false
+      register: ssh_maxauthtries_appropriate
+
+    - name: Set MaxAuthTries to 4
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        line: 'MaxAuthTries 4'
+        regexp: '^\s*MaxAuthTries'
+      when: not ssh_maxauthtries_appropriate.found
+
+    - name: Ensure IgnoreRhosts is enabled
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^\s*IgnoreRhosts\s+no\b'
+        state: absent
+
+    - name: Ensure HostbasedAuthentication is disabled
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^\s*HostbasedAuthentication\s+yes\b'
+        state: absent
+
+    - name: Ensure PermitRootLogin is disabled
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        line: 'PermitRootLogin no'
+        regexp: '^\s*PermitRootLogin\b'
+        state: present
+
+    - name: Ensure PermitEmptyPasswords is disabled
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^\s*PermitEmptyPasswords\s+yes\b'
+        state: absent
+
+    - name: Ensure PermitUserEnvironment is disabled
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^\s*PermitUserEnvironment\s+yes\b'
+        state: absent
+
+    # timeouts
+    #
+    - name: Ensure SSH warning banner is enabled
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        line: 'Banner /etc/issue.net'
+        state: present
+
+    - name: Ensure SSH PAM is enabled
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^\s*UsePam\s+no\b'
+        state: absent
+
+    - name: Ensure SSH TCP Tunnels are disabled
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        line: 'AllowTcpForwarding no'
+        regexp: '^\s*AllowTcpForwarding\b'
+        state: present
+  # MaxStartups
+  # MaxSessions
+  
+    - name: Ensure crypto policy is not over-ridden
+      ansible.builtin.lineinfile:
+        path: /etc/sysconfig/sshd
+        regexp: '^\s*CRYPTO_POLICY='
+        state: absent
