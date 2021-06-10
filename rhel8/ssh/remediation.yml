@@ -7,6 +7,7 @@
         owner: root
         group: root
         mode: 0600
+
           #- name: Ensure SSH access is limited
           #  ansible.builtin.lineinfile:
           #    path: /etc/ssh/sshd_config
@@ -111,8 +112,40 @@
         regexp: '^\s*PermitUserEnvironment\s+yes\b'
         state: absent
 
-    # timeouts
-    #
+    - name: Check if ClientAliveInterval is appropriate 
+      command: grep -E '^\s*ClientAliveInterval\s*([0-9]|[1-9][0-9]|[0-8][0-9][0-9]|900)$' /etc/ssh/sshd_config
+      register: ssh_clientaliveinterval_appropriate
+      changed_when: false
+      ignore_errors: true
+
+    - name: Set ClientAliveInterval to 900
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        line: 'ClientAliveInterval 900'
+        regexp: '^\s*ClientAliveInterval\b'
+      when: ssh_clientaliveinterval_appropriate.stdout == ""
+
+    - name: Check if LoginGraceTime is appropriate 
+      command: grep -E '^\s*LoginGraceTime\s*([0-9]|[1-5][0-9]|60)$' /etc/ssh/sshd_config
+      register: ssh_logingracetime_appropriate
+      changed_when: false
+      ignore_errors: true
+
+    - name: Set ClientAliveInterval to 900
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        line: 'LoginGraceTime 60'
+        regexp: '^\s*LoginGraceTime\b'
+      when: ssh_logingracetime_appropriate.stdout == ""
+
+
+    - name: Ensure SSH ClientAliveCountMax
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        line: 'ClientAliveCountMax 0'
+        regexp: '^\s*ClientAliveCountMax\b'
+        state: present
+
     - name: Ensure SSH warning banner is enabled
       ansible.builtin.lineinfile:
         path: /etc/ssh/sshd_config
@@ -131,8 +164,26 @@
         line: 'AllowTcpForwarding no'
         regexp: '^\s*AllowTcpForwarding\b'
         state: present
-  # MaxStartups
-  # MaxSessions
+
+    - name: Check if MaxStartups is appropriate
+      command: grep -E '^\s*MaxStartups\s+(((1[1-9]|[1-9][0-9][0-9]+):([0-9]+):([0-9]+))|(([0-9]+):(3[1-9]|[4-9][0-9]|[1-9][0-9][0-9]+):([0-9]+))|(([0-9]+):([0-9]+):(6[1-9]|[7-9][0-9]|[1-9][0-9][0-9]+)))' /etc/ssh/sshd_config
+      register: ssh_maxstartups_appropriate
+      changed_when: false
+      ignore_errors: true
+
+    - name: Set MaxStartups
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        line: 'MaxStartups 10:30:60'
+        regexp: '^\s*MaxStartups\b'
+        state: present
+      when: ssh_maxstartups_appropriate.stdout == ""
+
+    - name: Ensure MaxSessions is appropriate
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^\s*MaxSessions\s*([1-9][1-9])'
+        state: absent
   
     - name: Ensure crypto policy is not over-ridden
       ansible.builtin.lineinfile:
