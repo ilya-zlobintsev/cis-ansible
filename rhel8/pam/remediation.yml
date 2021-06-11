@@ -1,0 +1,94 @@
+- hosts: all
+  become: true
+  tasks:
+    - name: Ensure password creating requirements
+      community.general.pamd:
+        name: '{{ item }}'
+        type: password
+        module_path: pam_pwquality.so
+        module_arguments: 'try_first_pass enforce-for-root retry=3'
+        control: requisite
+      with_items:
+        - system-auth
+        - password-auth
+
+    - name: Check if password length policy is appropriate
+      command: grep -E '\s*minlen\s*=\s*(1[4-9]|[2-9][0-9]|60)' /etc/security/pwquality.conf
+      register: pw_minlen_appropriate
+      changed_when: false
+      ignore_errors: true
+
+    - name: Set password mininum length
+      ansible.builtin.lineinfile:
+        path: /etc/security/pwquality.conf
+        line: 'minlen = 14'
+        regexp: '\s*minlen'
+        state: present
+      when: pw_minlen_appropriate.stdout == ""
+
+    - name: Check if password minclass is appropriate
+      command: grep -E '\s*minclass\s*=\s*([4-9]|[1-9][0-9])' /etc/security/pwquality.conf
+      register: pw_minclass_appropriate
+      changed_when: false
+      ignore_errors: true
+
+    - name: Set password minclass
+      ansible.builtin.lineinfile:
+        path: /etc/security/pwquality.conf
+        line: 'minclass = 4'
+        regexp: '\s*minclass'
+        state: present
+      when: pw_minclass_appropriate.stdout == ""
+
+    - name: Ensure lockout for failed password attempts (preauth)
+      community.general.pamd:
+        name: '{{ item }}'
+        type: auth
+        control: required
+        module_path: pam_faillock.so
+        module_arguments: 'preauth
+            silent
+            deny=5
+            unlock_time=900'
+        state: args_present
+      with_items:
+        - system-auth
+        - password-auth
+
+    - name: Ensure lockout for failed password attempts (preauth)
+      community.general.pamd:
+        name: '{{ item }}'
+        type: auth
+        control: required
+        module_path: pam_faillock.so
+        module_arguments: 'authfail
+            deny=5
+            unlock_time=900'
+        state: args_present
+      with_items:
+        - system-auth
+        - password-auth
+
+
+        #something
+    - name: Check if the hashing algorithm is SHA-512
+      command: grep -E '^\s*password\s+sufficient\s+pam_unix.so\s+.*sha512\s*.*$' /etc/pam.d/password-auth /etc/pam.d/system-auth
+      register: pam_has_sha512
+      changed_when: false
+      ignore_errors: true
+
+    - name: Set the hashing algorithm to SHA-512
+      community.general.pamd:
+        name: '{{ item }}'
+        type: auth
+        control: sufficient
+        module_path: pam_unix.so
+        module_arguments: 'sha512
+            shadow
+            try_first_pass
+            use_authtok'
+        state: updated
+      with_items:
+        - system-auth
+        - password-auth
+      when: pam_has_sha512.stdout == ''
