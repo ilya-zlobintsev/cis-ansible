@@ -1,0 +1,18 @@
+- hosts: all
+  become: true
+  tasks:
+    - name: Check if there's a custom authselect profile
+      shell: 'authselect current | grep "Profile ID: custom"'
+      ignore_errors: true
+      changed_when: false
+      register: authselect_current_profile
+
+    - name: Check if pam_faillock.so is included in authselect
+      shell: 'grep pam_faillock.so /etc/authselect/password-auth /etc/authselect/system-auth'
+      ignore_errors: true
+      changed_when: false
+      register: authselect_has_pamfaillock
+
+    - name: Use a custom authselect profile
+      shell: 'authselect create-profile ansible-profile -b sssd --symlink-meta; authselect select custom/ansible-profile with-sudo with-faillock without-nullok'
+      when: (authselect_current_profile.stdout == "") or (authselect_has_pamfaillock.stdout == "")
