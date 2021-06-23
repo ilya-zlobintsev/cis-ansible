@@ -8,11 +8,11 @@
         group: root
         mode: 0600
 
-          #- name: Ensure SSH access is limited
-          #  ansible.builtin.lineinfile:
-          #    path: /etc/ssh/sshd_config
-          #    state: present
-          #    line:
+    - name: Ensure SSH access is limited
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        state: present
+        line: AllowUsers vagrant
 
     - find: paths='/etc/ssh' patterns='ssh_host_*_key'
       register: ssh_private_keys
@@ -54,10 +54,6 @@
         line: 'LogLevel INFO'
         state: present
       when: not ssh_loglevel_appropriate.found
-
-    - debug:
-        msg: "SSH Loglevel is appropriate"
-      when: ssh_loglevel_appropriate.found
 
     - name: Ensure X11 forwarding is disabled
       ansible.builtin.lineinfile:
@@ -112,9 +108,9 @@
         regexp: '^\s*PermitUserEnvironment\s+yes\b'
         state: absent
 
-    - name: Check if ClientAliveInterval is appropriate 
-      command: grep -E '^\s*ClientAliveInterval\s*([0-9]|[1-9][0-9]|[0-8][0-9][0-9]|900)$' /etc/ssh/sshd_config
-      register: ssh_clientaliveinterval_appropriate
+    - name: Check ClientAliveInterval
+      shell: grep -E '^\s*ClientAliveInterval' /etc/ssh/sshd_config | cut -d ' ' -f 2
+      register: ssh_clientaliveinterval
       changed_when: false
       ignore_errors: true
 
@@ -123,20 +119,20 @@
         path: /etc/ssh/sshd_config
         line: 'ClientAliveInterval 900'
         regexp: '^\s*ClientAliveInterval\b'
-      when: ssh_clientaliveinterval_appropriate.stdout == ""
+      when: (ssh_clientaliveinterval.stdout == '') or (ssh_clientaliveinterval.stdout | int > 900)
 
-    - name: Check if LoginGraceTime is appropriate 
-      command: grep -E '^\s*LoginGraceTime\s*([0-9]|[1-5][0-9]|60)$' /etc/ssh/sshd_config
-      register: ssh_logingracetime_appropriate
+    - name: Check LoginTraceTime
+      shell: grep -E '^\s*LoginGraceTime' /etc/ssh/sshd_config | cut -d ' ' -f 2
+      register: ssh_logingracetime
       changed_when: false
       ignore_errors: true
 
-    - name: Set ClientAliveInterval to 900
+    - name: Set LoginGraceTime to 60
       ansible.builtin.lineinfile:
         path: /etc/ssh/sshd_config
         line: 'LoginGraceTime 60'
         regexp: '^\s*LoginGraceTime\b'
-      when: ssh_logingracetime_appropriate.stdout == ""
+      when: (ssh_logingracetime.stdout == '') or (ssh_logingracetime.stdout | int > 60)
 
 
     - name: Ensure SSH ClientAliveCountMax
