@@ -1,0 +1,139 @@
+- hosts: all
+  become: yes
+  tasks:
+   - name: Check PASS_MAX_DAYS policy
+     shell: grep -E "^\s*PASS_MAX_DAYS\s" /etc/login.defs | awk '{print $2}'
+     changed_when: false
+     ignore_errors: true
+     register: pass_max_days_policy
+
+   - name: Set pass_max_days policy
+     ansible.builtin.lineinfile:
+       path: /etc/login.defs
+       line: 'PASS_MAX_DAYS 365'
+       regexp: '^\s*PASS_MAX_DAYS'
+       state: present
+     when: (pass_max_days_policy.stdout | int > 365) or (pass_max_days_policy.stdout == '')
+
+   - name: Check PASS_MAX_DAYS for users
+     shell: grep -E ^[^:]+:[^\!*] /etc/shadow | cut -d':' -f1,5
+     changed_when: false
+     ignore_errors: true
+     register: pass_max_days_users
+
+   - name: Set maxdays for users
+     shell: chage --maxdays 365 '{{ item.split(":")[0] }}'
+     when: item.split(":")[1] | int > 365
+     with_items: "{{ pass_max_days_users.stdout_lines }}"
+
+   - name: Check PASS_MIN_DAYS policy
+     shell: grep -E "^\s*PASS_MIN_DAYS\s" /etc/login.defs | awk '{print $2}'
+     changed_when: false
+     ignore_errors: true
+     register: pass_min_days_policy
+
+   - name: Set pass_min_days policy
+     ansible.builtin.lineinfile:
+       path: /etc/login.defs
+       line: 'PASS_MIN_DAYS 7'
+       regexp: '^\s*PASS_MIN_DAYS'
+       state: present
+     when: (pass_min_days_policy.stdout | int < 7) or (pass_min_days_policy.stdout == '')
+
+   - name: Check PASS_MIN_DAYS for users
+     shell: grep -E ^[^:]+:[^\!*] /etc/shadow | cut -d':' -f1,4
+     changed_when: false
+     ignore_errors: true
+     register: pass_min_days_users
+
+   - name: Set mindays for users
+     shell: chage --mindays 7 '{{ item.split(":")[0] }}'
+     when: item.split(":")[1] | int < 7
+     with_items: "{{ pass_min_days_users.stdout_lines }}"
+
+   - name: Check PASS_WARN_AGE policy
+     shell: grep -E "^\s*PASS_WARN_AGE\s" /etc/login.defs | awk '{print $2}'
+     changed_when: false
+     ignore_errors: true
+     register: pass_warn_age_policy
+
+   - name: Set pass_warn_age policy
+     ansible.builtin.lineinfile:
+       path: /etc/login.defs
+       line: 'PASS_WARN_AGE 7'
+       regexp: '^\s*PASS_WARN_AGE'
+       state: present
+     when: (pass_warn_age_policy.stdout | int < 7) or (pass_warn_age_policy.stdout == '')
+
+   - name: Check PASS_WARN_AGE for users
+     shell: grep -E ^[^:]+:[^\!*] /etc/shadow | cut -d':' -f1,6
+     changed_when: false
+     ignore_errors: true
+     register: pass_warn_age_users
+
+   - name: Set warndays for users
+     shell: chage --warndays 7 '{{ item.split(":")[0] }}'
+     when: item.split(":")[1] | int < 7
+     with_items: "{{ pass_warn_age_users.stdout_lines }}"
+
+   - name: Check inactive password lock age policy
+     shell: useradd -D | grep INACTIVE | cut -d'=' -f2
+     changed_when: false
+     ignore_errors: true
+     register: pass_inactive_age_policy
+
+   - name: Set pass_inactive_age policy
+     command: useradd -D -f 30
+     when: (pass_inactive_age_policy.stdout | int > 30) # By default this is read from /etc/default/useradd
+
+   - name: Check inactive password lock age for users
+     shell: grep -E ^[^:]+:[^\!*] /etc/shadow | cut -d':' -f1,7
+     changed_when: false
+     ignore_errors: true
+     register: pass_inactive_age_users
+
+   - name: Set inactive password lock age for users
+     shell: chage --inactive 30 '{{ item.split(":")[0] }}'
+     when: item.split(":")[1] | int > 30
+     with_items: "{{ pass_inactive_age_users.stdout_lines }}"
+
+   - name: Check all password change dates
+     shell: grep -E ^[^:]+:[^\!*] /etc/shadow | cut -d':' -f1,3
+     changed_when: false
+     ignore_errors: true
+     register: pass_last_changes
+
+   - name: Check current amount of days since 1970
+     shell: expr $(date +%s) / 86400
+     changed_when: false
+     ignore_errors: true
+     register: days_epoch
+
+   - name: Expire all passwords for users with password change date in the future
+     shell: passwd -e '{{ item.split(":")[0] }}'
+     when: (item.split(":")[1] | int) > (days_epoch.stdout | int)
+     with_items: "{{ pass_last_changes.stdout_lines }}"
+
+    # Check system accounts for not having a shell
+
+   - name: Check current shell timeout
+     shell: echo $TMOUT
+     changed_when: false
+     ignore_errors: true
+     register: shell_timeout
+
+   - name: Set shell timeout
+     ansible.builtin.copy:
+       content: 'readonly TMOUT=900 ; export TMOUT'
+       dest: /etc/profile.d/shell-timeout.sh
+     when: (shell_timeout.stdout | int > 900) or (shell_timeout.stdout == '0') or (shell_timeout.stdout == '')
+
+   - name: Check if root GID is 0
+     shell: grep "^root:" /etc/passwd | cut -f4 -d':'
+     register: root_gid
+     changed_when: false
+
+   - name: Set root GID to 0
+     shell: usermod -g 0 root
+     when: root_gid.stdout != '0'
+
