@@ -1,0 +1,14 @@
+- name: Run cron remediation
+  import_playbook: cron/remediation.yml
+
+- name: Run ssh remediation
+  import_playbook: ssh/remediation.yml
+
+- name: Run pam remediation
+  import_playbook: pam/remediation.yml
+
+- name: Run authselect remediation
+  import_playbook: pam/remediation.yml
+
+- name: Run users remediation
+  import_playbook: users/remediation.yml

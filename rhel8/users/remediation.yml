@@ -137,3 +137,17 @@
      shell: usermod -g 0 root
      when: root_gid.stdout != '0'
 
+   - name: Check current umask
+     shell: umask
+     changed_when: false
+     ignore_errors: true
+     register: umask
+
+   # Not sure if there's a better way to do this than just comparing numbers
+   - name: Set umask to 027
+     ansible.builtin.lineinfile:
+       path: /etc/profile
+       line: 'umask 027'
+       regexp: '\s*umask\s*'
+       state: present
+     when: umask | int < 27
